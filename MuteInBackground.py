@@ -73,7 +73,7 @@ class App(QWidget):
 
         self.setLayout(main_layout)
 
-        self.setWindowTitle('Application Audio Manager')
+        self.setWindowTitle('Mute In Background')
         self.setGeometry(300, 300, 600, 400)
 
         self.timer = QTimer()
