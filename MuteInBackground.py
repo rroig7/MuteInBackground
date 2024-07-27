@@ -78,7 +78,7 @@ class App(QWidget):
 
         self.timer = QTimer()
         self.timer.timeout.connect(self.check_focus)
-        self.timer.start(1000)  # Check focus every second
+        self.timer.start(400)  # Check focus every second
 
     def refresh_app_list(self):
         self.untracked_list.clear()
