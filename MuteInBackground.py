@@ -3,8 +3,9 @@ import psutil
 import win32gui
 import win32process
 from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QListWidget, QListWidgetItem, \
-    QLabel
+    QLabel, QSystemTrayIcon, QMenu, QAction
 from PyQt5.QtCore import QTimer, Qt
+from PyQt5.QtGui import QIcon
 from ctypes import POINTER, cast
 from comtypes import CLSCTX_ALL
 from pycaw.pycaw import AudioUtilities, ISimpleAudioVolume
@@ -80,11 +81,39 @@ class App(QWidget):
         self.timer.timeout.connect(self.check_focus)
         self.timer.start(400)  # Check focus every second
 
+        self.create_tray_icon()
+
+    def create_tray_icon(self):
+        self.tray_icon = QSystemTrayIcon(QIcon("MuteInBackground.ico"), self)
+        self.tray_icon.setToolTip("Mute In Background")
+
+        tray_menu = QMenu()
+        show_action = QAction("Show", self)
+        quit_action = QAction("Quit", self)
+
+        show_action.triggered.connect(self.show)
+        quit_action.triggered.connect(QApplication.instance().quit)
+
+        tray_menu.addAction(show_action)
+        tray_menu.addAction(quit_action)
+
+        self.tray_icon.setContextMenu(tray_menu)
+        self.tray_icon.show()
+
+    def closeEvent(self, event):
+        event.ignore()
+        self.hide()
+        self.tray_icon.showMessage(
+            "Mute In Background",
+            "Application minimized to tray.",
+            QSystemTrayIcon.Information,
+            2000
+        )
+
     def refresh_app_list(self):
         self.untracked_list.clear()
         apps = []
         tracked_apps = {self.tracked_list.item(index).text() for index in range(self.tracked_list.count())}
-
 
         for proc in psutil.process_iter(['pid', 'name']):
             try:
