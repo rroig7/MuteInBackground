@@ -85,6 +85,7 @@ class App(QWidget):
         apps = []
         tracked_apps = {self.tracked_list.item(index).text() for index in range(self.tracked_list.count())}
 
+
         for proc in psutil.process_iter(['pid', 'name']):
             try:
                 if proc.info['name'] not in tracked_apps and not proc.name().startswith(
