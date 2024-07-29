@@ -93,10 +93,12 @@ class App(QWidget):
 
         self.create_tray_icon()
 
+        self.setWindowIcon(QIcon("MuteInBackground.png"))
+
     def create_tray_icon(self):
         try:
             print("Creating tray icon...")
-            icon = QIcon("MuteInBackground.png")  # Ensure you have MuteInBackground.ico in the same directory
+            icon = QIcon("MuteInBackground.ico")  # Ensure you have MuteInBackground.ico in the same directory
             if not icon.isNull():
                 print("Icon loaded successfully")
             else:
@@ -104,6 +106,8 @@ class App(QWidget):
 
             self.tray_icon = QSystemTrayIcon(icon, self)
             self.tray_icon.setToolTip("Mute In Background")
+
+            self.tray_icon.activated.connect(self.on_tray_icon_activated)
 
             tray_menu = QMenu()
             show_action = QAction("Show", self)
@@ -125,6 +129,10 @@ class App(QWidget):
         except Exception as e:
             print(f"Error creating tray icon: {e}")
 
+    def on_tray_icon_activated(self, reason):
+        if reason == QSystemTrayIcon.DoubleClick:
+            self.show_window()
+
     def hide_window(self):
         self.hide()
         if self.tray_icon_enabled:
@@ -134,8 +142,12 @@ class App(QWidget):
 
     def show_window(self):
         self.show()
+        self.activateWindow()
 
     def closeEvent(self, event):
+        print("Unmuting all applications before closing...")
+        self.audio_manager.unmute_all()
+
         if self.tray_icon_enabled:
             event.ignore()
             self.hide_window()
@@ -148,9 +160,7 @@ class App(QWidget):
             print("Application minimized to tray")
         else:
             event.accept()
-            self.audio_manager.unmute_all()
             print("Application closed")
-
 
     def refresh_app_list(self):
         self.untracked_list.clear()
@@ -220,8 +230,6 @@ class App(QWidget):
         if window_titles:
             title = window_titles[0]
             # Fallback to executable name if title contains dynamic content like song names or URLs
-            if "Firefox" in title:
-                return "Firefox"
             if " - " in title or "http://" in title or "https://" in title:
                 return exe_name
             return title
