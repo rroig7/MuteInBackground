@@ -42,6 +42,7 @@ class App(QWidget):
         super().__init__()
 
         self.tray_icon_enabled = True
+        self.show_all_apps = False
         self.initUI()
         self.audio_manager = AudioManager()
 
@@ -78,6 +79,11 @@ class App(QWidget):
         self.tray_checkbox.stateChanged.connect(self.toggle_tray_icon)
         right_layout.addWidget(self.tray_checkbox)
 
+        self.show_all_checkbox = QCheckBox("Show all applications")
+        self.show_all_checkbox.setChecked(False)
+        self.show_all_checkbox.stateChanged.connect(self.toggle_show_all_apps)
+        right_layout.addWidget(self.show_all_checkbox)
+
         main_layout.addLayout(left_layout)
         main_layout.addLayout(center_layout)
         main_layout.addLayout(right_layout)
@@ -87,13 +93,14 @@ class App(QWidget):
         self.setWindowTitle('Mute In Background')
         self.setGeometry(300, 300, 600, 400)
 
+        # Set the window icon
+        self.setWindowIcon(QIcon("MuteInBackground.png"))
+
         self.timer = QTimer()
         self.timer.timeout.connect(self.check_focus)
         self.timer.start(400)  # Check focus every 400ms
 
         self.create_tray_icon()
-
-        self.setWindowIcon(QIcon("MuteInBackground.png"))
 
     def create_tray_icon(self):
         try:
@@ -169,11 +176,11 @@ class App(QWidget):
 
         for proc in psutil.process_iter(['pid', 'name']):
             try:
-                if proc.info['name'] not in tracked_apps and not proc.name().startswith(
-                        'svchost') and not proc.username().endswith('SYSTEM') and self.is_user_facing_app(proc.info['pid']):
-                    app_name = self.get_window_title(proc.info['pid'], proc.info['name'])
-                    if app_name and app_name not in apps:
-                        apps[app_name] = proc.info['name']
+                if proc.info['name'] not in tracked_apps and not proc.name().startswith('svchost') and not proc.username().endswith('SYSTEM'):
+                    if self.show_all_apps or self.is_user_facing_app(proc.info['pid']):
+                        app_name = self.get_window_title(proc.info['pid'], proc.info['name'])
+                        if app_name and app_name not in apps:
+                            apps[app_name] = proc.info['name']
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 continue
 
@@ -265,6 +272,10 @@ class App(QWidget):
         else:
             if hasattr(self, 'tray_icon') and not self.tray_icon.isVisible():
                 self.tray_icon.show()
+
+    def toggle_show_all_apps(self, state):
+        self.show_all_apps = (state == Qt.Checked)
+        self.refresh_app_list()
 
 
 def main():
