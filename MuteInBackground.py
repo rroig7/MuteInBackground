@@ -2,10 +2,10 @@ import sys
 import psutil
 import win32gui
 import win32process
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QListWidget, QListWidgetItem, \
-    QLabel, QSystemTrayIcon, QMenu, QAction
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QListWidget, QListWidgetItem, QLabel, QSystemTrayIcon, QMenu, QAction, QCheckBox
 from PyQt5.QtCore import QTimer, Qt
 from PyQt5.QtGui import QIcon
+from threading import Thread
 from ctypes import POINTER, cast
 from comtypes import CLSCTX_ALL
 from pycaw.pycaw import AudioUtilities, ISimpleAudioVolume
@@ -37,6 +37,7 @@ class App(QWidget):
     def __init__(self):
         super().__init__()
 
+        self.tray_icon_enabled = True
         self.initUI()
         self.audio_manager = AudioManager()
 
@@ -68,6 +69,11 @@ class App(QWidget):
         right_layout.addWidget(self.tracked_label)
         right_layout.addWidget(self.tracked_list)
 
+        self.tray_checkbox = QCheckBox("Enable tray icon")
+        self.tray_checkbox.setChecked(True)
+        self.tray_checkbox.stateChanged.connect(self.toggle_tray_icon)
+        right_layout.addWidget(self.tray_checkbox)
+
         main_layout.addLayout(left_layout)
         main_layout.addLayout(center_layout)
         main_layout.addLayout(right_layout)
@@ -79,56 +85,84 @@ class App(QWidget):
 
         self.timer = QTimer()
         self.timer.timeout.connect(self.check_focus)
-        self.timer.start(400)  # Check focus every second
+        self.timer.start(400)  # Check focus every 400ms
 
         self.create_tray_icon()
 
     def create_tray_icon(self):
-        self.tray_icon = QSystemTrayIcon(QIcon("MuteInBackground.ico"), self)
-        self.tray_icon.setToolTip("Mute In Background")
+        try:
+            icon = QIcon("MuteInBackground.png")  # Ensure you have MuteInBackground.ico in the same directory
+            if not icon.isNull():
+                print("Icon loaded successfully")
+            else:
+                print("Failed to load icon")
 
-        tray_menu = QMenu()
-        show_action = QAction("Show", self)
-        quit_action = QAction("Quit", self)
+            self.tray_icon = QSystemTrayIcon(icon, self)
+            self.tray_icon.setToolTip("Mute In Background")
 
-        show_action.triggered.connect(self.show)
-        quit_action.triggered.connect(QApplication.instance().quit)
+            tray_menu = QMenu()
+            show_action = QAction("Show", self)
+            quit_action = QAction("Quit", self)
 
-        tray_menu.addAction(show_action)
-        tray_menu.addAction(quit_action)
+            show_action.triggered.connect(self.show_window)
+            quit_action.triggered.connect(QApplication.instance().quit)
 
-        self.tray_icon.setContextMenu(tray_menu)
-        self.tray_icon.show()
+            tray_menu.addAction(show_action)
+            tray_menu.addAction(quit_action)
+
+            self.tray_icon.setContextMenu(tray_menu)
+            self.tray_icon.show()
+
+            if self.tray_icon.isVisible():
+                print("Tray icon is visible")
+            else:
+                print("Tray icon is not visible")
+        except Exception as e:
+            print(f"Error creating tray icon: {e}")
+
+    def hide_window(self):
+        self.hide()
+        if self.tray_icon_enabled:
+            self.tray_thread = Thread(target=self.create_tray_icon)
+            self.tray_thread.daemon = True
+            self.tray_thread.start()
+
+    def show_window(self):
+        self.show()
 
     def closeEvent(self, event):
-        event.ignore()
-        self.hide()
-        self.tray_icon.showMessage(
-            "Mute In Background",
-            "Application minimized to tray.",
-            QSystemTrayIcon.Information,
-            2000
-        )
+        if self.tray_icon_enabled:
+            event.ignore()
+            self.hide_window()
+            self.tray_icon.showMessage(
+                "Mute In Background",
+                "Application minimized to tray.",
+                QSystemTrayIcon.Information,
+                2000
+            )
+            print("Application minimized to tray")
+        else:
+            event.accept()
+            print("Application closed")
 
     def refresh_app_list(self):
         self.untracked_list.clear()
-        apps = []
+        apps = {}
         tracked_apps = {self.tracked_list.item(index).text() for index in range(self.tracked_list.count())}
 
         for proc in psutil.process_iter(['pid', 'name']):
             try:
                 if proc.info['name'] not in tracked_apps and not proc.name().startswith(
-                        'svchost') and not proc.username().endswith('SYSTEM'):
-                    apps.append((proc.info['name'], proc.info['pid']))
+                        'svchost') and not proc.username().endswith('SYSTEM') and self.is_user_facing_app(proc.info['pid']):
+                    app_name = self.get_window_title(proc.info['pid'], proc.info['name'])
+                    if app_name and app_name not in apps:
+                        apps[app_name] = proc.info['name']
             except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                 continue
 
-        # Sort apps alphabetically by name
-        apps.sort(key=lambda x: x[0])
-
-        for app_name, pid in apps:
-            item = QListWidgetItem(app_name)
-            item.setData(Qt.UserRole, pid)
+        for app_name, exe_name in sorted(apps.items()):
+            item = QListWidgetItem(f"{app_name} ({exe_name})")
+            item.setData(Qt.UserRole, exe_name)
             self.untracked_list.addItem(item)
 
     def track_application(self):
@@ -142,14 +176,14 @@ class App(QWidget):
         for item in selected_items:
             self.tracked_list.takeItem(self.tracked_list.row(item))
             self.untracked_list.addItem(item)
-            self.audio_manager.unmute_app(item.text())
+            self.audio_manager.unmute_app(item.data(Qt.UserRole))
         self.refresh_app_list()
 
     def check_focus(self):
         active_window = self.get_active_window_name()
         for index in range(self.tracked_list.count()):
             item = self.tracked_list.item(index)
-            app_name = item.text()
+            app_name = item.data(Qt.UserRole)
             if app_name != active_window:
                 self.audio_manager.mute_app(app_name)
             else:
@@ -162,6 +196,55 @@ class App(QWidget):
             if proc.info['pid'] == pid:
                 return proc.info['name']
         return None
+
+    def get_window_title(self, pid, exe_name):
+        def callback(hwnd, pid):
+            _, found_pid = win32process.GetWindowThreadProcessId(hwnd)
+            if found_pid == pid:
+                title = win32gui.GetWindowText(hwnd)
+                if win32gui.IsWindowVisible(hwnd) and title:
+                    return title
+            return None
+
+        window_titles = []
+        win32gui.EnumWindows(lambda hwnd, resultList: resultList.append(callback(hwnd, pid)), window_titles)
+        window_titles = [title for title in window_titles if title and not title.startswith("Microsoft Text Input Application")]
+
+        if window_titles:
+            title = window_titles[0]
+            # Fallback to executable name if title contains dynamic content like song names
+            if " - " in title or "Playing" in title or "Paused" in title:
+                return exe_name
+            return title
+        return exe_name
+
+    def is_user_facing_app(self, pid):
+        try:
+            for hwnd in self.enum_windows_for_pid(pid):
+                if win32gui.IsWindowVisible(hwnd) and win32gui.GetWindowText(hwnd):
+                    return True
+        except Exception as e:
+            print(f"Error checking user-facing app: {e}")
+        return False
+
+    def enum_windows_for_pid(self, pid):
+        def callback(hwnd, hwnds):
+            if win32process.GetWindowThreadProcessId(hwnd)[1] == pid:
+                hwnds.append(hwnd)
+            return True
+
+        hwnds = []
+        win32gui.EnumWindows(callback, hwnds)
+        return hwnds
+
+    def toggle_tray_icon(self, state):
+        self.tray_icon_enabled = (state == Qt.Checked)
+        if not self.tray_icon_enabled:
+            if hasattr(self, 'tray_icon') and self.tray_icon.isVisible():
+                self.tray_icon.hide()
+        else:
+            if hasattr(self, 'tray_icon') and not self.tray_icon.isVisible():
+                self.tray_icon.show()
 
 
 def main():
