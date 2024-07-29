@@ -229,6 +229,9 @@ class App(QWidget):
 
         if window_titles:
             title = window_titles[0]
+
+            if "Firefox" in title:
+                return "Firefox"
             # Fallback to executable name if title contains dynamic content like song names or URLs
             if " - " in title or "http://" in title or "https://" in title:
                 return exe_name
