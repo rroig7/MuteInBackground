@@ -98,7 +98,7 @@ class App(QWidget):
     def create_tray_icon(self):
         try:
             print("Creating tray icon...")
-            icon = QIcon("MuteInBackground.ico")  # Ensure you have MuteInBackground.ico in the same directory
+            icon = QIcon("MuteInBackground.png")  # Ensure you have MuteInBackground.ico in the same directory
             if not icon.isNull():
                 print("Icon loaded successfully")
             else:
