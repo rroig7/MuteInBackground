@@ -32,6 +32,10 @@ class AudioManager:
             print(f"Unmuted {app_name}")
             del self.muted_apps[app_name]
 
+    def unmute_all(self):
+        for app_name in list(self.muted_apps.keys()):
+            self.unmute_app(app_name)
+
 
 class App(QWidget):
     def __init__(self):
@@ -91,6 +95,7 @@ class App(QWidget):
 
     def create_tray_icon(self):
         try:
+            print("Creating tray icon...")
             icon = QIcon("MuteInBackground.png")  # Ensure you have MuteInBackground.ico in the same directory
             if not icon.isNull():
                 print("Icon loaded successfully")
@@ -143,7 +148,9 @@ class App(QWidget):
             print("Application minimized to tray")
         else:
             event.accept()
+            self.audio_manager.unmute_all()
             print("Application closed")
+
 
     def refresh_app_list(self):
         self.untracked_list.clear()
@@ -212,8 +219,10 @@ class App(QWidget):
 
         if window_titles:
             title = window_titles[0]
-            # Fallback to executable name if title contains dynamic content like song names
-            if " - " in title or "Playing" in title or "Paused" in title:
+            # Fallback to executable name if title contains dynamic content like song names or URLs
+            if "Firefox" in title:
+                return "Firefox"
+            if " - " in title or "http://" in title or "https://" in title:
                 return exe_name
             return title
         return exe_name
